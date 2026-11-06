@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="ckb" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#050507">
+<title>داونلۆدکەری فیلم | چاو تیڤی</title>
+<style>
+:root{--bg:#050507;--card:#14141a;--line:rgba(255,255,255,.12);--gold:#F5B83D;--gold2:#FFE08A;--gold3:#D9980F;--t:#F8FAFC;--m:#a9b0c4;--err:#ff6b6b;--ok:#4ade80}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:var(--bg);color:var(--t);font-family:system-ui,-apple-system,"Segoe UI",Tahoma,sans-serif;min-height:100%}
+body{padding:calc(20px + env(safe-area-inset-top,0px)) 16px calc(28px + env(safe-area-inset-bottom,0px));display:flex;justify-content:center}
+.wrap{width:100%;max-width:520px}
+h1{font-size:22px;margin:6px 0 4px;color:var(--gold)}
+p.sub{margin:0 0 18px;color:var(--m);font-size:14px;line-height:1.8}
+.card{background:var(--card);border:1px solid var(--line);border-radius:22px;padding:18px;margin-bottom:14px}
+label{display:block;font-size:13px;color:var(--m);margin:0 0 8px}
+input{width:100%;background:#0b0b10;border:1px solid var(--line);border-radius:14px;color:var(--t);padding:14px;font:inherit;font-size:15px;direction:ltr;text-align:left;outline:none}
+input:focus{border-color:var(--gold)}
+input+label{margin-top:14px}
+.btn{width:100%;border:0;border-radius:16px;padding:15px;margin-top:16px;font:inherit;font-weight:800;font-size:16px;color:#1a1204;background:linear-gradient(135deg,var(--gold2),var(--gold) 45%,var(--gold3));box-shadow:0 10px 28px rgba(245,184,61,.3);cursor:pointer}
+.btn.ghost{background:transparent;color:var(--gold);border:1px solid var(--gold);box-shadow:none}
+.btn:disabled{opacity:.5}
+.bar{height:12px;border-radius:99px;background:#0b0b10;overflow:hidden;border:1px solid var(--line)}
+.bar i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--gold3),var(--gold2));transition:width .2s}
+.stats{display:flex;justify-content:space-between;font-size:13px;color:var(--m);margin-top:10px;direction:ltr}
+.msg{font-size:14px;line-height:1.9;margin-top:12px}
+.msg.err{color:var(--err)}.msg.ok{color:var(--ok)}
+video{width:100%;border-radius:14px;background:#000;margin-top:12px;max-height:260px}
+.hint{font-size:12.5px;color:var(--m);line-height:1.9}
+.hide{display:none}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>داونلۆدکەری فیلم</h1>
+  <p class="sub">لینکی ڕاستەوخۆی فایلی ڤیدیۆ (MP4) پەیست بکە. فیلمەکە دادەبەزێت و دوگمەی پاشەکەوتکردن بۆ گەلەری دەردەکەوێت. تەنها بۆ فیلمەکانی خۆت یان ئەوانەی مۆڵەتت هەیە.</p>
+
+  <div class="card">
+    <label for="u">لینکی ڤیدیۆ</label>
+    <input id="u" type="url" inputmode="url" placeholder="https://.../film.mp4" autocomplete="off">
+    <label for="n">ناوی فایل (ئارەزوومەندانە)</label>
+    <input id="n" type="text" placeholder="film" autocomplete="off" style="direction:rtl;text-align:right">
+    <button class="btn" id="go">داونلۆد</button>
+    <button class="btn ghost hide" id="stop">ڕاگرتن</button>
+    <div class="msg err hide" id="err"></div>
+  </div>
+
+  <div class="card hide" id="prog">
+    <div class="bar"><i id="fill"></i></div>
+    <div class="stats"><span id="pct">0%</span><span id="size">0 MB</span><span id="spd">0 MB/s</span></div>
+  </div>
+
+  <div class="card hide" id="done">
+    <div class="msg ok" id="okm">داونلۆد تەواو بوو ✓</div>
+    <button class="btn" id="save">پاشەکەوتکردن لە گەلەری</button>
+    <button class="btn ghost" id="play">بینین</button>
+    <video id="v" class="hide" controls playsinline></video>
+    <p class="hint" id="how"></p>
+  </div>
+
+  <p class="hint">تێبینی: ئەگەر لینکەکە لینکی پەیجی سایت بێت (نەک خودی فایل)، یان سایتەکە ڕێگە نەدات (CORS)، داونلۆد ناکرێت. فیلمی زۆر گەورە لەسەر مۆبایل ڕەنگە زۆر شوێنی بیرگە بگرێت.</p>
+</div>
+
+<script>
+(function(){
+var $=function(i){return document.getElementById(i)};
+var isIOS=/iPad|iPhone|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
+var ctl=null,blob=null,fname='film.mp4',url=null;
+
+function err(t){var e=$('err');e.textContent=t;e.classList.toggle('hide',!t)}
+function mb(n){return (n/1048576).toFixed(n>1e9?2:1)+' MB'}
+function nameFrom(u,typed,type){
+  var n=(typed||'').trim();
+  if(!n){try{n=decodeURIComponent(new URL(u).pathname.split('/').pop()||'')}catch(e){}}
+  n=(n||'film').replace(/[\\/:*?"<>|]/g,'_');
+  if(!/\.(mp4|m4v|mov|webm|mkv)$/i.test(n)){
+    var ext=/webm/.test(type)?'.webm':/quicktime/.test(type)?'.mov':/matroska/.test(type)?'.mkv':'.mp4';
+    n+=ext;
+  }
+  return n;
+}
+function reset(){
+  err('');$('prog').classList.add('hide');$('done').classList.add('hide');
+  $('v').classList.add('hide');$('v').removeAttribute('src');
+  if(url){URL.revokeObjectURL(url);url=null}
+  blob=null;
+}
+
+$('go').onclick=async function(){
+  reset();
+  var u=$('u').value.trim();
+  if(!/^https?:\/\//i.test(u)){err('لینکێکی دروست بنووسە (دەبێت بە https:// دەست پێبکات).');return}
+  ctl=new AbortController();
+  $('go').disabled=true;$('stop').classList.remove('hide');$('prog').classList.remove('hide');
+  var fill=$('fill'),t0=Date.now();
+  try{
+    var r=await fetch(u,{signal:ctl.signal});
+    if(!r.ok)throw new Error('HTTP '+r.status);
+    var type=(r.headers.get('content-type')||'').toLowerCase();
+    if(type.indexOf('text/html')>-1||type.indexOf('json')>-1){
+      throw new Error('PAGE');
+    }
+    var total=+r.headers.get('content-length')||0;
+    fname=nameFrom(u,$('n').value,type);
+    var rd=r.body.getReader(),chunks=[],got=0,last=0,lastT=Date.now();
+    for(;;){
+      var s=await rd.read();
+      if(s.done)break;
+      chunks.push(s.value);got+=s.value.length;
+      var now=Date.now();
+      if(now-lastT>400){
+        var sp=(got-last)/((now-lastT)/1000);last=got;lastT=now;
+        $('spd').textContent=mb(sp)+'/s';
+      }
+      $('size').textContent=mb(got)+(total?' / '+mb(total):'');
+      if(total){var p=Math.min(100,got/total*100);fill.style.width=p+'%';$('pct').textContent=p.toFixed(0)+'%'}
+      else{fill.style.width='100%';$('pct').textContent='...'}
+    }
+    var mime=type.indexOf('video/')===0?type.split(';')[0]:'video/mp4';
+    blob=new Blob(chunks,{type:mime});chunks=null;
+    fill.style.width='100%';$('pct').textContent='100%';
+    url=URL.createObjectURL(blob);
+    $('done').classList.remove('hide');
+    $('okm').textContent='داونلۆد تەواو بوو ✓  ('+mb(blob.size)+')';
+    $('how').textContent=isIOS
+      ?'لە ئایفۆن: دوگمەی پاشەکەوتکردن دابگرە، پاشان «Save Video» هەڵبژێرە تا بچێتە Photos.'
+      :'دوگمەی پاشەکەوتکردن فایلەکە لەسەر مۆبایلەکەت هەڵدەگرێت (لە Downloads، و گەلەری زۆر جار خۆکار نیشانی دەدات).';
+  }catch(e){
+    if(e.name==='AbortError')err('داونلۆد ڕاگیرا.');
+    else if(e.message==='PAGE')err('ئەمە لینکی پەیجە، نەک فایلی ڤیدیۆ. پێویستە لینکی ڕاستەوخۆی فایل بێت (کۆتایی .mp4).');
+    else if(/HTTP/.test(e.message))err('سێرڤەر وەڵامی نەدایەوە ('+e.message+'). لینکەکە بپشکنە.');
+    else err('داونلۆد نەکرا. ڕەنگە سایتەکە ڕێگە نەدات (CORS) یان لینکەکە هەڵە بێت. فیلمەکە لەسەر سێرڤەری خۆت دابنێ (وەک GitHub) و دووبارە تاقی بکەرەوە.');
+    $('prog').classList.add('hide');
+  }finally{
+    $('go').disabled=false;$('stop').classList.add('hide');ctl=null;
+  }
+};
+$('stop').onclick=function(){if(ctl)ctl.abort()};
+
+$('save').onclick=async function(){
+  if(!blob)return;
+  var file=new File([blob],fname,{type:blob.type});
+  // iPhone / phones with share sheet: lets the user choose "Save Video"
+  if(navigator.canShare&&navigator.canShare({files:[file]})){
+    try{await navigator.share({files:[file],title:fname});return}catch(e){if(e.name==='AbortError')return}
+  }
+  // Android / desktop: normal download
+  var a=document.createElement('a');a.href=url;a.download=fname;document.body.appendChild(a);a.click();a.remove();
+};
+$('play').onclick=function(){var v=$('v');v.src=url;v.classList.remove('hide');v.play().catch(function(){})};
+})();
+</script>
+</body>
+</html>
